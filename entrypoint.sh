@@ -47,14 +47,18 @@ for ((count=1; count<=$BAREOS_STORAGE_DEVICE_NO; count++)); do
   cat > "$DEVICE_CONF" <<EOF
 Device {
   Name = $BAREOS_STORAGE_DEVICE_NAME-$count
-  Media Type = File
-  Archive Device = /data
-  LabelMedia = yes
-  Random Access = yes
+  Media Type = LTO-5
+  Archive Device = /dev/nst0
   AutomaticMount = yes
-  RemovableMedia = no
-  AlwaysOpen = no
-  Description = "File device. A connecting Director must have the same Name and MediaType."
+  AlwaysOpen = yes
+  RemovableMedia = yes
+  RandomAccess = no
+  Alert Command = "sh -c 'smartctl -H -l error %c'"  
+  Maximum Changer Wait = 600
+  Maximum Rewind Wait = 600
+  Maximum Open Wait = 600
+  Spool Directory = /var/spool/bareos
+  Maximum Spool Size = 60G
   Maximum Concurrent Jobs = 1
 }
 

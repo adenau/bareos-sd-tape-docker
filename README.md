@@ -3,6 +3,8 @@
 ## Overview
 This repository provides a Dockerized implementation of the Bareos Storage Daemon (SD). It simplifies the deployment and configuration of the Bareos SD, enabling dynamic configuration using environment variables. This container is designed to handle backups seamlessly as part of the Bareos ecosystem.
 
+** This is the special edition for lto tape **
+
 ## Why This Exists
 Installing Bareos SD directly on a host system can be cumbersome and may not suit containerized environments. This repository provides:
 
