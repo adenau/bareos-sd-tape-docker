@@ -73,18 +73,22 @@ Storage {
 ```
 
 ### Device Configuration (`device-<count>.conf`)
-Generated dynamically for each device:
+Generated dynamically for ont lto device:
 ```plaintext
 Device {
-  Name = File-Metroplex-1
-  Media Type = File
-  Archive Device = /data
-  LabelMedia = yes
-  Random Access = yes
+  Name = File-LTO
+  Media Type = LTO-5
+  Archive Device = /dev/nst0
   AutomaticMount = yes
-  RemovableMedia = no
-  AlwaysOpen = no
-  Description = "File device. A connecting Director must have the same Name and MediaType."
+  AlwaysOpen = yes
+  RemovableMedia = yes
+  RandomAccess = no
+  Alert Command = "sh -c 'smartctl -H -l error %c'"  
+  Maximum Changer Wait = 600
+  Maximum Rewind Wait = 600
+  Maximum Open Wait = 600
+  Spool Directory = /var/spool/bareos
+  Maximum Spool Size = 60G
   Maximum Concurrent Jobs = 1
 }
 ```

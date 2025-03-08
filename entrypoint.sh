@@ -42,11 +42,11 @@ EOF
 # Generate the device configuration files
 mkdir -p "$DEVICE_CONF_DIR"
 echo "Generating device configurations in $DEVICE_CONF_DIR..."
-for ((count=1; count<=$BAREOS_STORAGE_DEVICE_NO; count++)); do
-  DEVICE_CONF="$DEVICE_CONF_DIR/device-$count.conf"
+
+  DEVICE_CONF="$DEVICE_CONF_DIR/device-lto.conf"
   cat > "$DEVICE_CONF" <<EOF
 Device {
-  Name = $BAREOS_STORAGE_DEVICE_NAME-$count
+  Name = $BAREOS_STORAGE_DEVICE_NAME
   Media Type = LTO-5
   Archive Device = /dev/nst0
   AutomaticMount = yes
@@ -63,7 +63,7 @@ Device {
 }
 
 EOF
-done
+
 
 echo "Deleting extra FileStorage.conf file in $DEVICE_CONF_DIR..."
 rm "$DEVICE_CONF_DIR/FileStorage.conf"
