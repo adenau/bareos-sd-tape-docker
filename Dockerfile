@@ -13,15 +13,19 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Add the Bareos repository and install Bareos Storage Daemon
+# Add the Bareos repository
 RUN wget https://download.bareos.org/current/Debian_12/add_bareos_repositories.sh && \
     chmod +x add_bareos_repositories.sh && \
-    ./add_bareos_repositories.sh && \
-    apt-get update && \
+    ./add_bareos_repositories.sh
+
+# Install Bareos Storage Daemon
+RUN apt-get update && \
     apt install -y \
       bareos-storage bareos-tools \
-      mt-st mtx lsscsi sg3-utils tapeutils smartmontools && \
-    apt-get clean && \
+      mt-st mtx lsscsi sg3-utils tapeutils smartmontools
+
+# Clean up
+RUN apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # Expose Bareos port dynamically
