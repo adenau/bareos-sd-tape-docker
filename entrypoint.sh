@@ -46,7 +46,7 @@ echo "Generating device configurations in $DEVICE_CONF_DIR..."
   DEVICE_CONF="$DEVICE_CONF_DIR/device-lto.conf"
   cat > "$DEVICE_CONF" <<EOF
 Device {
-  Name = $BAREOS_STORAGE_DEVICE_NAME
+  Name = HP-TapeDrive0
   Media Type = LTO-5
   Archive Device = /dev/nst0
   AutomaticMount = yes
