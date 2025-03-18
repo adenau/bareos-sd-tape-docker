@@ -69,7 +69,7 @@ echo "Deleting extra FileStorage.conf file in $DEVICE_CONF_DIR..."
 #rm "$DEVICE_CONF_DIR/FileStorage.conf"
 
 # Set the default block size for the tape device
-exec /usr/bin/mt -f /dev/nst0 defblksize 0
+/usr/bin/mt -f /dev/nst0 defblksize 0
 
 # Start the Bareos Storage Daemon
 echo "Starting Bareos Storage Daemon..."
