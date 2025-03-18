@@ -66,7 +66,7 @@ EOF
 
 
 echo "Deleting extra FileStorage.conf file in $DEVICE_CONF_DIR..."
-rm "$DEVICE_CONF_DIR/FileStorage.conf"
+#rm "$DEVICE_CONF_DIR/FileStorage.conf"
 
 # Start the Bareos Storage Daemon
 echo "Starting Bareos Storage Daemon..."
