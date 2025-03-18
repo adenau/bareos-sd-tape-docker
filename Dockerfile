@@ -21,7 +21,7 @@ RUN wget https://download.bareos.org/current/Debian_12/add_bareos_repositories.s
 # Install Bareos Storage Daemon
 RUN apt-get update && \
     apt install -y \
-      bareos-storage bareos-tools \
+      bareos-storage bareos-tools bareos-storage-tape \
       mt-st mtx lsscsi sg3-utils smartmontools
 
 # Clean up
