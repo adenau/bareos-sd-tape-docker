@@ -53,13 +53,13 @@ Device {
   AlwaysOpen = yes
   RemovableMedia = yes
   RandomAccess = no
-  Alert Command = "sh -c 'smartctl -H -l error %c'"  
   Maximum Changer Wait = 600
   Maximum Rewind Wait = 600
   Maximum Open Wait = 600
   Spool Directory = /var/spool/bareos
   Maximum Spool Size = 60G
   Maximum Concurrent Jobs = 1
+  Offline On Unmount = yes
 }
 
 EOF
