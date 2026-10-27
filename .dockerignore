@@ -1,0 +1,7 @@
+# Never send local credentials or repository metadata to the image build.
+.git
+env
+.env
+__pycache__
+*.pyc
+tests

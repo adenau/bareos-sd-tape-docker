@@ -1,76 +1,138 @@
 #!/bin/bash
+# Render the configuration templates, validate Bareos, then start Supervisor.
+set -euo pipefail
 
-# Exit immediately if a command exits with a non-zero status
-set -e
+set_defaults() {
+  export BAREOS_STORAGE_PORT="${BAREOS_STORAGE_PORT:-9103}"
+  export BAREOS_STORAGE_DEVICE_NAME="${BAREOS_STORAGE_DEVICE_NAME:-HP-TapeDrive0}"
+  export BAREOS_MEDIA_TYPE="${BAREOS_MEDIA_TYPE:-LTO-5}"
+  export TAPE_DEVICE="${TAPE_DEVICE:-/dev/nst0}"
+  export BAREOS_SPOOL_DIRECTORY="${BAREOS_SPOOL_DIRECTORY:-/var/spool/bareos}"
+  export BAREOS_MAXIMUM_SPOOL_SIZE="${BAREOS_MAXIMUM_SPOOL_SIZE:-60G}"
+  export BAREOS_MAXIMUM_CHANGER_WAIT="${BAREOS_MAXIMUM_CHANGER_WAIT:-600}"
+  export BAREOS_MAXIMUM_REWIND_WAIT="${BAREOS_MAXIMUM_REWIND_WAIT:-600}"
+  export BAREOS_MAXIMUM_OPEN_WAIT="${BAREOS_MAXIMUM_OPEN_WAIT:-600}"
+  export BAREOS_MAXIMUM_CONCURRENT_JOBS="${BAREOS_MAXIMUM_CONCURRENT_JOBS:-1}"
+  export BAREOS_AUTOMATIC_MOUNT="${BAREOS_AUTOMATIC_MOUNT:-yes}"
+  export BAREOS_ALWAYS_OPEN="${BAREOS_ALWAYS_OPEN:-yes}"
+  export BAREOS_OFFLINE_ON_UNMOUNT="${BAREOS_OFFLINE_ON_UNMOUNT:-yes}"
+  export TAPE_WEBHOOK_ENABLED="${TAPE_WEBHOOK_ENABLED:-false}"
+  export TAPE_WEBHOOK_TOKEN="${TAPE_WEBHOOK_TOKEN:-}"
+  export TAPE_WEBHOOK_LISTEN_ADDRESS="${TAPE_WEBHOOK_LISTEN_ADDRESS:-0.0.0.0}"
+  export TAPE_WEBHOOK_PORT="${TAPE_WEBHOOK_PORT:-9080}"
+  export TAPE_COMMAND_TIMEOUT="${TAPE_COMMAND_TIMEOUT:-180}"
+  export TAPE_SET_BLOCK_SIZE="${TAPE_SET_BLOCK_SIZE:-yes}"
+  export TAPE_BLOCK_SIZE="${TAPE_BLOCK_SIZE:-0}"
+}
 
-# Default configuration file paths
-CONFIG_DIR=/etc/bareos/bareos-sd.d
-DIRECTOR_CONF=$CONFIG_DIR/director/bareos-dir.conf
-STORAGE_CONF=$CONFIG_DIR/storage/bareos-sd.conf
-DEVICE_CONF_DIR=$CONFIG_DIR/device
-
-# Validate required environment variables
-if [ -z "$BAREOS_DIR_HOSTNAME" ] || [ -z "$BAREOS_DIR_PASSWORD" ] || \
-   [ -z "$BAREOS_DIR_ADDRESS" ] || [ -z "$BAREOS_STORAGE_NAME" ] || \
-   [ -z "$BAREOS_STORAGE_PORT" ] || [ -z "$BAREOS_STORAGE_DEVICE_NO" ]; then
-  echo "ERROR: Missing one or more required environment variables."
-  echo "Ensure BAREOS_DIR_HOSTNAME, BAREOS_DIR_PASSWORD, BAREOS_DIR_ADDRESS,"
-  echo "BAREOS_STORAGE_NAME, BAREOS_STORAGE_PORT, and BAREOS_STORAGE_DEVICE_NO are set."
+fail() {
+  echo "ERROR: $1" >&2
   exit 1
+}
+
+validate_number() {
+  local name="$1" minimum="$2" maximum="$3"
+  local value="${!name}"
+  [[ "$value" =~ ^[0-9]{1,8}$ ]] || fail "Invalid $name"
+  value=$((10#$value))
+  (( value >= minimum && value <= maximum )) || fail "Invalid $name"
+  export "$name=$value"
+}
+
+normalize_boolean() {
+  local name="$1"
+  local value="${!name}"
+  case "${value,,}" in
+    yes|true|1) export "$name=$2" ;;
+    no|false|0) export "$name=$3" ;;
+    *) fail "Invalid $name" ;;
+  esac
+}
+
+validate_settings() {
+  local name value
+  local safe_text='^[a-zA-Z0-9_./ -]+$'
+
+  for name in BAREOS_DIR_HOSTNAME BAREOS_DIR_PASSWORD BAREOS_STORAGE_NAME; do
+    [[ -n "${!name:-}" ]] || fail "Missing $name"
+    export "$name"
+  done
+
+  # These values go inside quoted Bareos fields. Reject configuration syntax.
+  for name in BAREOS_DIR_HOSTNAME BAREOS_STORAGE_NAME BAREOS_STORAGE_DEVICE_NAME \
+              BAREOS_MEDIA_TYPE TAPE_DEVICE BAREOS_SPOOL_DIRECTORY; do
+    [[ "${!name}" =~ $safe_text ]] || fail "Invalid $name"
+  done
+  [[ "$TAPE_DEVICE" == /dev/* && "$TAPE_DEVICE/" != */../* ]] || fail "Invalid TAPE_DEVICE"
+  [[ "$BAREOS_SPOOL_DIRECTORY" == /* && "$BAREOS_SPOOL_DIRECTORY/" != */../* ]] || fail "Invalid BAREOS_SPOOL_DIRECTORY"
+  [[ "$BAREOS_MAXIMUM_SPOOL_SIZE" =~ ^[0-9]+([KkMmGgTtPp][Bb]?)?$ ]] || fail "Invalid BAREOS_MAXIMUM_SPOOL_SIZE"
+  [[ "$TAPE_WEBHOOK_LISTEN_ADDRESS" =~ ^[0-9a-fA-F:.]+$ ]] || fail "Invalid TAPE_WEBHOOK_LISTEN_ADDRESS"
+
+  validate_number BAREOS_STORAGE_PORT 1 65535
+  validate_number TAPE_WEBHOOK_PORT 1 65535
+  validate_number TAPE_COMMAND_TIMEOUT 1 3600
+  validate_number TAPE_BLOCK_SIZE 0 16777216
+  validate_number BAREOS_MAXIMUM_CONCURRENT_JOBS 1 100
+  for name in BAREOS_MAXIMUM_CHANGER_WAIT BAREOS_MAXIMUM_REWIND_WAIT BAREOS_MAXIMUM_OPEN_WAIT; do
+    validate_number "$name" 1 86400
+  done
+  for name in BAREOS_AUTOMATIC_MOUNT BAREOS_ALWAYS_OPEN BAREOS_OFFLINE_ON_UNMOUNT; do
+    normalize_boolean "$name" yes no
+  done
+  for name in TAPE_WEBHOOK_ENABLED TAPE_SET_BLOCK_SIZE; do
+    normalize_boolean "$name" true false
+  done
+
+  if [[ "$TAPE_WEBHOOK_ENABLED" == true ]]; then
+    [[ "$TAPE_WEBHOOK_TOKEN" =~ ^[a-zA-Z0-9_-]{32,}$ ]] || fail "TAPE_WEBHOOK_TOKEN needs at least 32 letters, digits, underscores or hyphens"
+    [[ "$TAPE_WEBHOOK_PORT" != "$BAREOS_STORAGE_PORT" ]] || fail "Webhook and Bareos ports must differ"
+  else
+    export TAPE_WEBHOOK_TOKEN=""
+  fi
+
+  # envsubst does not escape values. Escape the password for its quoted field.
+  [[ ! "$BAREOS_DIR_PASSWORD" =~ [[:cntrl:]] ]] || fail "BAREOS_DIR_PASSWORD contains control characters"
+  value="${BAREOS_DIR_PASSWORD//\\/\\\\}"
+  export BAREOS_DIR_PASSWORD_ESCAPED="${value//\"/\\\"}"
+}
+
+render_configuration() {
+  local templates="$1" config_dir="$2" runtime_dir="$3"
+  umask 077
+  mkdir -p "$config_dir/director" "$config_dir/storage" "$config_dir/device" "$runtime_dir"
+  chmod 700 "$runtime_dir"
+
+  envsubst '${BAREOS_DIR_HOSTNAME} ${BAREOS_DIR_PASSWORD_ESCAPED}' \
+    < "$templates/director.conf.template" > "$config_dir/director/bareos-dir.conf"
+  envsubst '${BAREOS_STORAGE_NAME} ${BAREOS_STORAGE_PORT}' \
+    < "$templates/storage.conf.template" > "$config_dir/storage/bareos-sd.conf"
+  envsubst '${BAREOS_STORAGE_DEVICE_NAME} ${BAREOS_MEDIA_TYPE} ${TAPE_DEVICE}
+    ${BAREOS_AUTOMATIC_MOUNT} ${BAREOS_ALWAYS_OPEN} ${BAREOS_OFFLINE_ON_UNMOUNT}
+    ${BAREOS_MAXIMUM_CHANGER_WAIT} ${BAREOS_MAXIMUM_REWIND_WAIT} ${BAREOS_MAXIMUM_OPEN_WAIT}
+    ${BAREOS_SPOOL_DIRECTORY} ${BAREOS_MAXIMUM_SPOOL_SIZE} ${BAREOS_MAXIMUM_CONCURRENT_JOBS}' \
+    < "$templates/device.conf.template" > "$config_dir/device/device-lto.conf"
+  envsubst '${TAPE_WEBHOOK_TOKEN}' \
+    < "$templates/hooks.json.template" > "$runtime_dir/hooks.json"
+
+  chmod 600 "$config_dir/director/bareos-dir.conf" "$config_dir/storage/bareos-sd.conf" \
+    "$config_dir/device/device-lto.conf" "$runtime_dir/hooks.json"
+}
+
+main() {
+  set_defaults
+  validate_settings
+  render_configuration /etc/bareos-tape/templates /etc/bareos/bareos-sd.d /run/tape-webhook
+  mkdir -p "$BAREOS_SPOOL_DIRECTORY"
+  /usr/sbin/bareos-sd -t
+
+  if [[ "$TAPE_SET_BLOCK_SIZE" == true ]]; then
+    /usr/bin/timeout --kill-after=5 "$TAPE_COMMAND_TIMEOUT" \
+      /usr/bin/mt -f "$TAPE_DEVICE" defblksize "$TAPE_BLOCK_SIZE"
+  fi
+
+  exec /usr/bin/supervisord -c /etc/bareos-tape/supervisord.conf
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main
 fi
-
-# Generate the director configuration file
-mkdir -p $(dirname "$DIRECTOR_CONF")
-echo "Generating $DIRECTOR_CONF..."
-cat > "$DIRECTOR_CONF" <<EOF
-Director {
-  Name = $BAREOS_DIR_HOSTNAME
-  Password = $BAREOS_DIR_PASSWORD
-}
-EOF
-
-# Generate the storage configuration file
-mkdir -p $(dirname "$STORAGE_CONF")
-echo "Generating $STORAGE_CONF..."
-cat > "$STORAGE_CONF" <<EOF
-Storage {
-  Name = $BAREOS_STORAGE_NAME
-  SD Port = $BAREOS_STORAGE_PORT
-}
-EOF
-
-# Generate the device configuration files
-mkdir -p "$DEVICE_CONF_DIR"
-echo "Generating device configurations in $DEVICE_CONF_DIR..."
-
-  DEVICE_CONF="$DEVICE_CONF_DIR/device-lto.conf"
-  cat > "$DEVICE_CONF" <<EOF
-Device {
-  Name = HP-TapeDrive0
-  Media Type = LTO-5
-  Archive Device = /dev/nst0
-  AutomaticMount = yes
-  AlwaysOpen = yes
-  RemovableMedia = yes
-  RandomAccess = no
-  Maximum Changer Wait = 600
-  Maximum Rewind Wait = 600
-  Maximum Open Wait = 600
-  Spool Directory = /var/spool/bareos
-  Maximum Spool Size = 60G
-  Maximum Concurrent Jobs = 1
-  Offline On Unmount = yes
-}
-
-EOF
-
-# Remove the extra FileStorage.conf file
-echo "Deleting extra FileStorage.conf file in $DEVICE_CONF_DIR..."
-#rm "$DEVICE_CONF_DIR/FileStorage.conf"
-
-# Set the default block size for the tape device
-/usr/bin/mt -f /dev/nst0 defblksize 0
-
-# Start the Bareos Storage Daemon
-echo "Starting Bareos Storage Daemon..."
-exec bareos-sd -f

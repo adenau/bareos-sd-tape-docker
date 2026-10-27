@@ -1,0 +1,6 @@
+# Keep Linux entrypoints executable after Windows checkouts.
+*.sh text eol=lf
+*.py text eol=lf
+Dockerfile text eol=lf
+*.template text eol=lf
+*.conf text eol=lf

@@ -1,0 +1,16 @@
+Device {
+  Name = "${BAREOS_STORAGE_DEVICE_NAME}"
+  Media Type = "${BAREOS_MEDIA_TYPE}"
+  Archive Device = "${TAPE_DEVICE}"
+  Automatic Mount = ${BAREOS_AUTOMATIC_MOUNT}
+  Always Open = ${BAREOS_ALWAYS_OPEN}
+  Removable Media = yes
+  Random Access = no
+  Maximum Changer Wait = ${BAREOS_MAXIMUM_CHANGER_WAIT}
+  Maximum Rewind Wait = ${BAREOS_MAXIMUM_REWIND_WAIT}
+  Maximum Open Wait = ${BAREOS_MAXIMUM_OPEN_WAIT}
+  Spool Directory = "${BAREOS_SPOOL_DIRECTORY}"
+  Maximum Spool Size = ${BAREOS_MAXIMUM_SPOOL_SIZE}
+  Maximum Concurrent Jobs = ${BAREOS_MAXIMUM_CONCURRENT_JOBS}
+  Offline On Unmount = ${BAREOS_OFFLINE_ON_UNMOUNT}
+}

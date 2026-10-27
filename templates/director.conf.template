@@ -1,0 +1,4 @@
+Director {
+  Name = "${BAREOS_DIR_HOSTNAME}"
+  Password = "${BAREOS_DIR_PASSWORD_ESCAPED}"
+}

@@ -1,0 +1,4 @@
+Storage {
+  Name = "${BAREOS_STORAGE_NAME}"
+  SD Port = ${BAREOS_STORAGE_PORT}
+}

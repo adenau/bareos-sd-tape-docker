@@ -1,0 +1,46 @@
+[
+  {
+    "id": "status",
+    "execute-command": "/usr/local/bin/tape-control.py",
+    "http-methods": ["GET"],
+    "pass-arguments-to-command": [
+      {"source": "string", "name": "status"}
+    ],
+    "include-command-output-in-response": true,
+    "include-command-output-in-response-on-error": true,
+    "response-headers": [
+      {"name": "Content-Type", "value": "application/json"},
+      {"name": "Cache-Control", "value": "no-store"}
+    ],
+    "trigger-rule": {
+      "match": {
+        "type": "value",
+        "value": "${TAPE_WEBHOOK_TOKEN}",
+        "parameter": {"source": "header", "name": "X-Tape-Token"}
+      }
+    },
+    "trigger-rule-mismatch-http-response-code": 403
+  },
+  {
+    "id": "eject",
+    "execute-command": "/usr/local/bin/tape-control.py",
+    "http-methods": ["POST"],
+    "pass-arguments-to-command": [
+      {"source": "string", "name": "eject"}
+    ],
+    "include-command-output-in-response": true,
+    "include-command-output-in-response-on-error": true,
+    "response-headers": [
+      {"name": "Content-Type", "value": "application/json"},
+      {"name": "Cache-Control", "value": "no-store"}
+    ],
+    "trigger-rule": {
+      "match": {
+        "type": "value",
+        "value": "${TAPE_WEBHOOK_TOKEN}",
+        "parameter": {"source": "header", "name": "X-Tape-Token"}
+      }
+    },
+    "trigger-rule-mismatch-http-response-code": 403
+  }
+]

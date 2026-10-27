@@ -1,52 +1,24 @@
-# Start with a base image
+# File Name: Dockerfile
+# Purpose: Build Bareos tape storage with optional fixed HTTP tape controls.
+# Overview: Preserves Debian Bookworm and the existing Bareos package source,
+# adding the packaged webhook server, Supervisor, and a restricted mt helper.
 FROM debian:bookworm
 
-# Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
-
-# Update and install prerequisites for Bareos repository setup
-RUN apt-get update && \
-    apt-get install -y \
-    wget \
-    gnupg \
-    apt-transport-https && \
-    apt-get clean && \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget gnupg apt-transport-https ca-certificates && \
     rm -rf /var/lib/apt/lists/*
-
-# Add the Bareos repository
 RUN wget https://download.bareos.org/current/Debian_12/add_bareos_repositories.sh && \
-    chmod +x add_bareos_repositories.sh && \
-    ./add_bareos_repositories.sh
+    chmod +x add_bareos_repositories.sh && ./add_bareos_repositories.sh
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bareos-storage bareos-tools bareos-storage-tape \
+    mt-st mtx lsscsi sg3-utils smartmontools \
+    webhook supervisor python3 psmisc gettext-base && rm -rf /var/lib/apt/lists/*
 
-# Install Bareos Storage Daemon
-RUN apt-get update && \
-    apt install -y \
-      bareos-storage bareos-tools bareos-storage-tape \
-      mt-st mtx lsscsi sg3-utils smartmontools
-
-# Clean up
-RUN apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# Expose Bareos port dynamically
-ENV BAREOS_STORAGE_PORT="9103"
-EXPOSE $BAREOS_STORAGE_PORT
-
-# Create directories for configuration and data
+COPY entrypoint.sh tape-control.py /usr/local/bin/
+COPY templates/ /etc/bareos-tape/templates/
+COPY supervisord.conf /etc/bareos-tape/supervisord.conf
+RUN chmod 755 /usr/local/bin/entrypoint.sh /usr/local/bin/tape-control.py
+# Listener ports are runtime settings. Publish matching ports with -p or Compose.
 VOLUME ["/data"]
-
-# Add entrypoint script
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
-
-# Environment variables for configuration
-ENV BAREOS_DIR_HOSTNAME="" \
-    BAREOS_DIR_PASSWORD="" \
-    BAREOS_DIR_ADDRESS="" \
-    BAREOS_STORAGE_NAME="" \
-    BAREOS_STORAGE_PORT="" \
-    BAREOS_STORAGE_DEVICE_NAME="" \
-    BAREOS_STORAGE_DEVICE_NO=""
-
-# Set entrypoint
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
