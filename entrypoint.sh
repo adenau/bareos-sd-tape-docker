@@ -4,6 +4,7 @@ set -euo pipefail
 
 set_defaults() {
   export BAREOS_STORAGE_PORT="${BAREOS_STORAGE_PORT:-9103}"
+  export BAREOS_DEBUG_LEVEL="${BAREOS_DEBUG_LEVEL:-0}"
   export BAREOS_STORAGE_DEVICE_NAME="${BAREOS_STORAGE_DEVICE_NAME:-HP-TapeDrive0}"
   export BAREOS_MEDIA_TYPE="${BAREOS_MEDIA_TYPE:-LTO-5}"
   export TAPE_DEVICE="${TAPE_DEVICE:-/dev/nst0}"
@@ -69,6 +70,7 @@ validate_settings() {
   [[ "$TAPE_WEBHOOK_LISTEN_ADDRESS" =~ ^[0-9a-fA-F:.]+$ ]] || fail "Invalid TAPE_WEBHOOK_LISTEN_ADDRESS"
 
   validate_number BAREOS_STORAGE_PORT 1 65535
+  validate_number BAREOS_DEBUG_LEVEL 0 1000
   validate_number TAPE_WEBHOOK_PORT 1 65535
   validate_number TAPE_COMMAND_TIMEOUT 1 3600
   validate_number TAPE_BLOCK_SIZE 0 16777216
@@ -121,15 +123,20 @@ render_configuration() {
 main() {
   set_defaults
   validate_settings
+  echo "[entrypoint] Rendering Bareos configuration"
   render_configuration /etc/bareos-tape/templates /etc/bareos/bareos-sd.d /run/tape-webhook
   mkdir -p "$BAREOS_SPOOL_DIRECTORY"
-  /usr/sbin/bareos-sd -t
+  echo "[entrypoint] Validating Bareos configuration"
+  /usr/sbin/bareos-sd -t || fail "Bareos configuration validation failed; see diagnostics above"
 
   if [[ "$TAPE_SET_BLOCK_SIZE" == true ]]; then
+    echo "[entrypoint] Setting tape block size on $TAPE_DEVICE (timeout ${TAPE_COMMAND_TIMEOUT}s)"
     /usr/bin/timeout --kill-after=5 "$TAPE_COMMAND_TIMEOUT" \
-      /usr/bin/mt -f "$TAPE_DEVICE" defblksize "$TAPE_BLOCK_SIZE"
+      /usr/bin/mt -f "$TAPE_DEVICE" defblksize "$TAPE_BLOCK_SIZE" \
+      || fail "Tape block-size setup failed; check device mapping and drive state, or set TAPE_SET_BLOCK_SIZE=no to skip this operation"
   fi
 
+  echo "[entrypoint] Starting Supervisor (Bareos debug level $BAREOS_DEBUG_LEVEL)"
   exec /usr/bin/supervisord -c /etc/bareos-tape/supervisord.conf
 }
 

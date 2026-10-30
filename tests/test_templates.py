@@ -85,6 +85,8 @@ class TemplateTests(unittest.TestCase):
             {"TAPE_DEVICE": "/dev/nst0;erase"},
             {"TAPE_COMMAND_TIMEOUT": "0"},
             {"BAREOS_STORAGE_PORT": "65536"},
+            {"BAREOS_DEBUG_LEVEL": "-1"},
+            {"BAREOS_DEBUG_LEVEL": "1001"},
             {"BAREOS_DIR_PASSWORD": "secret\nnew directive"},
             {"BAREOS_ALWAYS_OPEN": "perhaps"},
         ]
@@ -103,6 +105,7 @@ class TemplateTests(unittest.TestCase):
                 "TAPE_WEBHOOK_ENABLED": enabled,
                 "TAPE_WEBHOOK_PORT": "9099",
                 "TAPE_WEBHOOK_LISTEN_ADDRESS": "127.0.0.1",
+                "BAREOS_DEBUG_LEVEL": "100",
             }):
                 # Only relocate the runtime pid path; do not create system directories.
                 contents = (ROOT / "supervisord.conf").read_text()
@@ -112,6 +115,8 @@ class TemplateTests(unittest.TestCase):
                 options = ServerOptions()
                 options.realize(["-c", str(config_path)])
                 groups = {group.name: group for group in options.process_group_configs}
+                self.assertEqual(groups["bareos-sd"].process_configs[0].command,
+                                 "/usr/sbin/bareos-sd -f -d 100")
                 webhook = groups["webhook"].process_configs[0]
                 self.assertEqual(webhook.autostart, enabled == "true")
                 self.assertIn("-ip 127.0.0.1 -port 9099", webhook.command)

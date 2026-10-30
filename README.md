@@ -38,6 +38,49 @@ network can reach the configured webhook port without publishing it to the host.
 Bind published ports only on the intended internal interface. The HTTP token is
 not encryption; use a trusted network or an HTTPS reverse proxy.
 
+## Troubleshooting startup
+
+From the Docker host, use `docker logs --tail 200 -f bareos-sd-tape`.
+Supervisor forwards child stdout/stderr there; Bareos Messages resources may
+route other messages to the Director or files. A running container does not
+necessarily mean its Bareos child is running: repeated startup failures can
+leave the child in Supervisor's FATAL state.
+
+Inside the container, check configuration and processes:
+
+```sh
+/usr/sbin/bareos-sd -t
+pgrep -a bareos-sd
+ls -l "${TAPE_DEVICE:-/dev/nst0}"
+find /var/log/bareos -type f -exec tail -n 80 {} \;
+```
+
+The log directory may be empty or absent depending on Bareos message routing.
+Configuration validation checks syntax, not Director connectivity or tape readiness.
+Avoid sharing configuration dumps containing the Director password.
+
+With the updated image, a root-only Supervisor socket allows these commands
+inside the container:
+
+```sh
+supervisorctl -c /etc/bareos-tape/supervisord.conf status
+# During a maintenance window, stop the managed daemon before foreground debugging:
+supervisorctl -c /etc/bareos-tape/supervisord.conf stop bareos-sd
+/usr/sbin/bareos-sd -f -d 100
+# After Ctrl-C stops the foreground process:
+supervisorctl -c /etc/bareos-tape/supervisord.conf start bareos-sd
+```
+
+Older images do not configure this socket. Do not kill the daemon to debug it:
+Supervisor may restart it. Never run a second SD against the same drive.
+For startup debug output under Supervisor, set `BAREOS_DEBUG_LEVEL=100` in
+the environment and recreate the container using the updated image. Return it
+to `0` afterward. Treat debug logs as potentially sensitive.
+
+Entrypoint logs identify configuration validation and tape block-size setup
+before Supervisor starts. If block-size setup fails, inspect device mapping and
+drive state; `TAPE_SET_BLOCK_SIZE=no` skips that operation when appropriate.
+
 ## HTTP endpoints
 
 Every request needs `X-Tape-Token: <configured token>`. There are exactly two hooks:
@@ -85,6 +128,7 @@ eject automatically. No Docker socket or SSH access is needed.
 | `BAREOS_DIR_PASSWORD` | Required | Director authentication password |
 | `BAREOS_STORAGE_NAME` | Required | Storage daemon resource name |
 | `BAREOS_STORAGE_PORT` | `9103` | SD listen port |
+| `BAREOS_DEBUG_LEVEL` | `0` | Debug verbosity, 0–1000; temporarily use 100 for diagnosis |
 | `BAREOS_STORAGE_DEVICE_NAME` | `HP-TapeDrive0` | Single Device resource name |
 | `BAREOS_MEDIA_TYPE` | `LTO-5` | Match the Director storage Media Type |
 | `TAPE_DEVICE` | `/dev/nst0` | Container tape character-device path |
